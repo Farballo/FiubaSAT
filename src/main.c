@@ -1,14 +1,15 @@
 #include "FreeRTOS.h"
 #include "task.h"
+#include "timers.h"
+#include "semphr.h"
+
 #include "uart.h"
 #include "circular_buffer.h"
 #include "NMEA.h"
-
 #include "blink.h"
-#include "timers.h"
-#include <stdio.h>
-#include "semphr.h"
 #include "test.h"
+
+#include <stdio.h>
 #include <string.h>
 
 #include <libopencm3/stm32/rcc.h>
@@ -18,61 +19,85 @@
 // Handle para la tarea del parpadeo
 static TaskHandle_t blink_handle;
 
-#define SIZE_BUFFER 512
+#define SIZE_BUFFER_RX1 512
 
-/* Tarea asignada a recolección de datos de GPS */
+/**
+ * @brief Tarea manejo GPS UART1.
+ * Recepción de datos NMEA desde un GPS a través de USART1.
+ * Decodificación de los mensajes GGA y RMC.
+ * Envío de los datos decodificados a través de USART2.
+ * Envío de datos completos a través de USART3
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ */
 static void taskUART1_GPS(uint32_t usart_id) {
-    vTaskDelay(pdMS_TO_TICKS(4000));
-    char buffer[SIZE_BUFFER];
+    vTaskDelay(pdMS_TO_TICKS(4000)); // Espero que terminen los tests
 
-    char GGA[100];
-    char RMC[100];
+    char buffer[SIZE_BUFFER_RX1];   // Buffer para almacenar los datos recibidos
 
-    GPSSTRUCT gpsData;
+    char GGA[100]; // Buffer para almacenar el mensaje GGA
+    char RMC[100]; // Buffer para almacenar el mensaje RMC
 
-    int flagGGA = 0, flagRMC = 0;
-    char bufferNMEA[100];
+    GPSSTRUCT gpsData; // Estructura para almacenar los datos decodificados
+
+    int flagGGA = 0, flagRMC = 0; // Flags para indicar si los datos son válidos
+    char bufferNMEA[100]; // Buffer para almacenar los datos a enviar
 
     for (;;) {
-        memset(buffer, 0, SIZE_BUFFER);
-        get_rxq_buffer(usart_id, buffer, SIZE_BUFFER);
+        memset(buffer, 0, SIZE_BUFFER_RX1);
+        if (UART_available_data(usart_id) > 0) {
+            usart_disable_rx_interrupt(usart_id);
+            get_rxq_buffer(usart_id, buffer, SIZE_BUFFER_RX1); // Leer datos de la cola de recepción
+            
+            Copy_from_to(buffer, "$GPGGA,", "*", GGA, 100);
+            if (decodeGGA(GGA, &gpsData.ggastruct) == 0) flagGGA = 2;  // 2 indicates the data is valid
+            else flagGGA = 1;  // 1 indicates the data is invalid
 
-        Copy_from_to(buffer, "$GPGGA,", "*", GGA);
-        if (decodeGGA(GGA, &gpsData.ggastruct) == 0) flagGGA = 2;  // 2 indicates the data is valid
-        else flagGGA = 1;  // 1 indicates the data is invalid
+            Copy_from_to(buffer, "$GPRMC,", "*", RMC, 100);
+            if (decodeRMC(RMC, &gpsData.rmcstruct) == 0) flagRMC = 2;  // 2 indicates the data is valid
+            else flagRMC = 1;  // 1 indicates the data is invalid
+            
+             
+            if (flagGGA == 2 && flagRMC == 2) {
+                UART_puts(USART2, "GGA and RMC data is valid\r\n", pdMS_TO_TICKS(100));
+                snprintf(bufferNMEA, sizeof(bufferNMEA), "Latitud: %s %c - Longitud: %s %c - %i/%i/%i\r\n", gpsData.ggastruct.lcation.latitude, 
+                        gpsData.ggastruct.lcation.NS, gpsData.ggastruct.lcation.longitude, gpsData.ggastruct.lcation.EW, 
+                        gpsData.rmcstruct.date.Day, gpsData.rmcstruct.date.Mon, gpsData.rmcstruct.date.Yr);
+                UART_puts(USART2, bufferNMEA, pdMS_TO_TICKS(500));
+            } 
+            else {
+                UART_puts(USART2, "GGA and RMC data is invalid\r\n", pdMS_TO_TICKS(100));
+                UART_puts(USART2, buffer, pdMS_TO_TICKS(100));
+                UART_puts(USART2, "\r\n", pdMS_TO_TICKS(100));
+                UART_puts(USART2, "\r\n", pdMS_TO_TICKS(100)); 
+            }       
 
-        Copy_from_to(buffer, "$GPRMC,", "*", RMC);
-        if (decodeRMC(RMC, &gpsData.rmcstruct) == 0) flagRMC = 2;  // 2 indicates the data is valid
-        else flagRMC = 1;  // 1 indicates the data is invalid
+            UART_puts(USART2, GGA, pdMS_TO_TICKS(100));
+            UART_puts(USART2, "\r\n", pdMS_TO_TICKS(100));
+            
+            UART_puts(USART2, RMC, pdMS_TO_TICKS(100));
+            UART_puts(USART2, "\r\n", pdMS_TO_TICKS(100));
 
-        if (flagGGA == 2 && flagRMC == 2) {
-            UART_puts(USART3, "GGA and RMC data is valid\r\n", pdMS_TO_TICKS(100));
-            snprintf(bufferNMEA, sizeof(bufferNMEA), "Latitud: %s %c - Longitud: %s %c - %i/%i/%i\r\n", gpsData.ggastruct.lcation.latitude, gpsData.ggastruct.lcation.NS, gpsData.ggastruct.lcation.longitude, gpsData.ggastruct.lcation.EW, gpsData.rmcstruct.date.Day, gpsData.rmcstruct.date.Mon, gpsData.rmcstruct.date.Yr);
-            UART_puts(USART3, bufferNMEA, pdMS_TO_TICKS(500));
-        } 
-        else {
-            UART_puts(USART3, "GGA and RMC data is invalid\r\n", pdMS_TO_TICKS(100));
-            UART_puts(USART3, buffer, pdMS_TO_TICKS(100));
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100)); 
-        }       
+            UART_puts(USART2, "\r\n", pdMS_TO_TICKS(100));
+            UART_puts(USART2, "\r\n", pdMS_TO_TICKS(100));
+            
 
-        UART_puts(USART3, GGA, pdMS_TO_TICKS(100));
-        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-        
-        UART_puts(USART3, RMC, pdMS_TO_TICKS(100));
-        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
+            UART_puts(USART1, buffer, pdMS_TO_TICKS(100));
 
-        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-        UART_clear_rx_queue(usart_id, pdMS_TO_TICKS(100));
-        
+            UART_clear_rx_queue(usart_id, pdMS_TO_TICKS(100));
+            
+            usart_enable_rx_interrupt(usart_id);
+        }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
-/* Acá estaría la tarea asignada al periférico conectado a la interfaz USART3 */
-static void taskUART3_receive(uint32_t usart_id) {
+/**
+ * @brief Tarea para la transmisión de datos a través de UART.
+ * Lee los datos de la cola de transmisión y los envía a través del USART especificado.
+ * En este caso particular lo que reciba UART3 se vuelve a envíar por acá siendo un echo reply.
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ */
+static void taskUART3_echo(uint32_t usart_id) {
     uint16_t data;
     for (;;) {
         // Esperar a que el semáforo indique que hay datos disponibles
@@ -88,30 +113,6 @@ static void taskUART3_receive(uint32_t usart_id) {
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
-
-/* 
-static void taskUART3_TuteTransmit(uint32_t usart_id) {
-    // Se inicializa la USART
-
-    serial_begin(USART2, BAUD115K2);
-    serial_begin(USART3, BAUD115K2);
-
-    // PC13 (LED) as output:
-    rcc_periph_clock_enable(RCC_GPIOC);
-    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
-    gpio_set(GPIOC, GPIO13);
-    gpio_clear(GPIOC, GPIO13); // start buffering.
-
-    const char saludo[] = "Hola mundo!\r\n";
-    int saludo_len = sizeof(saludo) - 1;
-    for(;;) {
-        if(serial_puts(usart_id, saludo) != saludo_len)
-            gpio_toggle(GPIOC, GPIO13); 
-        usart_enable_tx_interrupt(usart_id);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-*/
 
 /* Handler en caso de que la aplicación cause un overflow del stack */
 void vApplicationStackOverflowHook(TaskHandle_t xTask __attribute__((unused)), char *pcTaskName __attribute__((unused))) {
@@ -131,8 +132,6 @@ int main(void) {
     if(UART_setup(USART2, 115200) != pdPASS) return -1;
     if(UART_setup(USART3, 115200) != pdPASS) return -1;
 
-    
-
     // Crear tarea para parpadear el LED
     xTaskCreate(taskBlink, "LED", 100, NULL, 2, &blink_handle);  // Crear tarea para parpadear el LED
 
@@ -141,15 +140,14 @@ int main(void) {
     xTaskCreate((TaskFunction_t)taskUART_transmit, "UART2 TX", 128, (void *)USART2, 2, NULL);
     xTaskCreate((TaskFunction_t)taskUART_transmit, "UART3 TX", 128, (void *)USART3, 2, NULL);
 
-    // Creación de tareas genéricas para recepción UART
-    xTaskCreate((TaskFunction_t)taskUART3_receive, "UART3 RX", 128, (void *)USART3, 2, NULL);
-    xTaskCreate((TaskFunction_t)taskUART1_GPS, "UART1 GPS", 1024, (void *)USART1, 2, NULL);
-    //xTaskCreate((TaskFunction_t)taskUART3_TuteTransmit, "UART3 Tute", 128, (void *)USART3, 2, NULL);
-
     // Crear tareas para Test
     xTaskCreate(taskTestUART_Semaphore, "Test_Semaphore", 100, NULL, 2, NULL);  // Crear tarea para Test
     xTaskCreate(taskTest, "Test", 100, NULL, 2, NULL);  // Crear tarea para Test
     //xTaskCreate(taskPrintBuffer, "Print_buffer", 100, NULL, 2, NULL);  // Crear tarea para Test
+
+    // Creación de tareas genéricas para recepción UART
+    xTaskCreate((TaskFunction_t)taskUART1_GPS, "UART1 GPS", 1024, (void *)USART1, 2, NULL);
+    xTaskCreate((TaskFunction_t)taskUART3_echo, "UART3 RX", 128, (void *)USART3, 2, NULL);
 
     // Start RTOS Task scheduler
 	vTaskStartScheduler();
