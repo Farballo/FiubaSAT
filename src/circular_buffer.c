@@ -1,10 +1,12 @@
+#include "circular_buffer.h"
+#include "uart.h"
+
+#include <string.h>
+
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/usart.h>
-#include "circular_buffer.h"
-#include "uart.h"
-#include "string.h"
 
 // Definición de la estructura circular_buffer_t
 struct circular_buffer_t {
@@ -197,16 +199,37 @@ void circular_buffer_reset(circular_buffer_t *buff) {
     }
 }
 
-
-int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest) {
+/**
+ * @brief Copia una subcadena de la cadena fuente a una cadena de destino, delimitada por patrones de inicio y fin.
+ *
+ * La función `Copy_from_to` busca un patrón de inicio en la cadena fuente, y luego copia todo el contenido
+ * entre el patrón de inicio y el patrón de fin en el buffer de destino, incluyendo tanto el patrón de inicio 
+ * como el patrón de fin.
+ * Si alguno de los patrones no se encuentra en la cadena fuente o si el buffer de destino no es lo suficientemente 
+ * grande para contener la subcadena, la función retorna un código de error.
+ *
+ * @param source         Puntero a la cadena fuente donde se buscarán los patrones y la subcadena a copiar.
+ * @param pattern_start  Puntero al patrón de inicio que indica desde dónde se copiará la subcadena.
+ * @param pattern_finish Puntero al patrón de fin que indica hasta dónde se copiará la subcadena.
+ * @param dest           Puntero al buffer de destino donde se copiará la subcadena extraída.
+ * @param dest_size      Tamaño máximo del buffer de destino.
+ *
+ * @return int
+ *         0  - Éxito, la subcadena fue copiada correctamente al buffer de destino.
+ *        -1  - El patrón de inicio no se encontró en la cadena fuente.
+ *        -2  - El patrón de fin no se encontró en la cadena fuente después del patrón de inicio.
+ *        -3  - El buffer de destino es demasiado pequeño para contener la subcadena.
+ *
+ * @note Esta función copia el patrón de inicio y el patrón de fin en el buffer de destino.
+ * @note La función asume que el buffer `dest` es lo suficientemente grande para almacenar la subcadena resultante,
+ *       incluyendo el carácter nulo ('\0') al final de la cadena. Si el buffer no es suficiente, se retorna -3.
+ */
+int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest, size_t dest_size) {
     // Encontrar la posición del patrón de inicio en la cadena fuente
     const char *start = strstr(source, pattern_start);
     if (start == NULL) {
         return -1; // Patrón de inicio no encontrado
     }
-
-    // Avanzar el puntero al final del patrón de inicio
-    //start += strlen(pattern_start);
 
     // Encontrar la posición del patrón de final después del patrón de inicio
     const char *finish = strstr(start, pattern_finish);
@@ -214,10 +237,15 @@ int Copy_from_to(const char *source, const char *pattern_start, const char *patt
         return -2; // Patrón de final no encontrado
     }
 
-    // Calcular la longitud de la subcadena a copiar
-    size_t len = finish - start;
+    // Calcular la longitud de la subcadena a copiar, incluyendo el patrón de fin
+    size_t len = (finish + strlen(pattern_finish)) - start;
 
-    // Copiar la subcadena al buffer de destino
+    // Verificar si el buffer de destino es lo suficientemente grande
+    if (len + 1 > dest_size) { // +1 para incluir el carácter nulo
+        return -3; // Buffer de destino demasiado pequeño
+    }
+
+    // Copiar la subcadena al buffer de destino, incluyendo el patrón de fin
     strncpy(dest, start, len);
     dest[len] = '\0'; // Null-terminar el buffer de destino
 

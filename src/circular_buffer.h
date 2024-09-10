@@ -110,5 +110,32 @@ uint16_t circular_buffer_to_string(circular_buffer_t *buff, char *output, uint16
  */
 void circular_buffer_reset(circular_buffer_t *buff);
 
-int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest);
+
+/**
+ * @brief Copia una subcadena de la cadena fuente a una cadena de destino, delimitada por patrones de inicio y fin.
+ *
+ * La función `Copy_from_to` busca un patrón de inicio en la cadena fuente, y luego copia todo el contenido
+ * entre el patrón de inicio y el patrón de fin en el buffer de destino, incluyendo tanto el patrón de inicio 
+ * como el patrón de fin.
+ * Si alguno de los patrones no se encuentra en la cadena fuente o si el buffer de destino no es lo suficientemente 
+ * grande para contener la subcadena, la función retorna un código de error.
+ *
+ * @param source         Puntero a la cadena fuente donde se buscarán los patrones y la subcadena a copiar.
+ * @param pattern_start  Puntero al patrón de inicio que indica desde dónde se copiará la subcadena.
+ * @param pattern_finish Puntero al patrón de fin que indica hasta dónde se copiará la subcadena.
+ * @param dest           Puntero al buffer de destino donde se copiará la subcadena extraída.
+ * @param dest_size      Tamaño máximo del buffer de destino.
+ *
+ * @return int
+ *         0  - Éxito, la subcadena fue copiada correctamente al buffer de destino.
+ *        -1  - El patrón de inicio no se encontró en la cadena fuente.
+ *        -2  - El patrón de fin no se encontró en la cadena fuente después del patrón de inicio.
+ *        -3  - El buffer de destino es demasiado pequeño para contener la subcadena.
+ *
+ * @note Esta función copia el patrón de inicio y el patrón de fin en el buffer de destino.
+ * @note La función asume que el buffer `dest` es lo suficientemente grande para almacenar la subcadena resultante,
+ *       incluyendo el carácter nulo ('\0') al final de la cadena. Si el buffer no es suficiente, se retorna -3.
+ */
+int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest, size_t dest_size);
+
 #endif // CIRCULAR_BUFFER_H
