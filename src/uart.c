@@ -6,15 +6,22 @@
 #include <string.h>
 #include "circular_buffer.h"
 
-#define SIZE_BUFFER 512  // Queues size
+#define SIZE_BUFFER 512  // Buffer sizes
 
+/**
+ * @brief Estructura para manejar la configuración de UART.
+ * 
+ * Esta estructura contiene información necesaria para manejar las UART, incluyendo 
+ * estructuras de datos para la transmisión y recepción, mutexes para protección de
+ * acceso, y un contador de interrupciones.
+ */
 typedef struct {
-    uint32_t usart;  // USART_ID 
-    QueueHandle_t txq;  // Cola de transmisión
-    circular_buffer_t *rxq;  // Cola de recepción donde se bufferean los datos
-    SemaphoreHandle_t mutex;  // Mutex para protección de acceso
-    SemaphoreHandle_t semaphore; // Semáforo para señalizar datos de rxq
-    int interrupciones;  // Contador de interrupciones
+    uint32_t usart;  // Identificador del USART.
+    QueueHandle_t txq;  // Cola para la transmisión de datos.
+    circular_buffer_t *rxq;  // Buffer circular de recepción para almacenar los datos recibidos.
+    SemaphoreHandle_t mutex;  // Mutex para proteger el acceso a los recursos compartidos.
+    SemaphoreHandle_t semaphore; // Semáforo para señalizar la disponibilidad de datos en rxq.
+    int interrupciones;  // Contador de interrupciones.
 } uart_t;
 
 // Definición de estructuras UART
@@ -26,7 +33,12 @@ static uart_t uart3;
 static BaseType_t uart_init(uart_t *uart, uint32_t usart);
 static void usart_generic_isr(uint32_t usart_id);
 
-// Manejadores de UARTs
+/**
+ * @brief Obtiene el manejador de UART basado en el identificador del USART.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @return puntero a la estructura uart_t correspondiente, o NULL si el identificador no es válido.
+ */
 static uart_t *get_uart(uint32_t usart_id) {
     switch (usart_id) {
         case USART1: return &uart1;
@@ -36,6 +48,13 @@ static uart_t *get_uart(uint32_t usart_id) {
     }
 }
 
+/**
+ * @brief Configura el USART especificado con la velocidad de baudios dada.
+ * 
+ * @param usart Identificador del USART (USART1, USART2, USART3).
+ * @param baudrate Velocidad de baudios para la configuración del USART.
+ * @return pdPASS si la configuración fue exitosa, pdFAIL en caso contrario.
+ */
 BaseType_t UART_setup(uint32_t usart, uint32_t baudrate) {
     uart_t *uart = get_uart(usart);
     if (uart == NULL) return pdFAIL;
@@ -123,7 +142,16 @@ BaseType_t UART_setup(uint32_t usart, uint32_t baudrate) {
     return pdPASS;
 }
 
-// Inicialización de UART
+/**
+ * @brief Inicializa la estructura de UART.
+ * 
+ * Configura la cola de transmisión, la cola de recepción, y los semáforos para la UART
+ * especificada.
+ * 
+ * @param uart Puntero a la estructura uart_t que se desea inicializar.
+ * @param usart Identificador del USART (USART1, USART2, USART3).
+ * @return pdPASS si la inicialización fue exitosa, pdFAIL en caso contrario.
+ */
 static BaseType_t uart_init(uart_t *uart, uint32_t usart) {
     uart->usart = usart;  // Asigna el USART correspondiente
     uart->txq = xQueueCreate(SIZE_BUFFER, sizeof(uint16_t)); // Crea la cola de transmisión
@@ -155,6 +183,13 @@ static BaseType_t uart_init(uart_t *uart, uint32_t usart) {
     return pdPASS;
 }
 
+/**
+ * @brief Tarea para la transmisión de datos a través de UART.
+ * 
+ * Lee los datos de la cola de transmisión y los envía a través del USART especificado.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ */
 void taskUART_transmit(uint32_t usart_id) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return;
@@ -173,21 +208,34 @@ void taskUART_transmit(uint32_t usart_id) {
     }
 }
 
+/**
+ * @brief Recibe datos de UART y los almacena en el buffer de receipción.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @param data Puntero a la variable donde se almacenará el dato recibido.
+ * @return pdTRUE si el dato fue recibido exitosamente, pdFAIL en caso contrario.
+ */
 BaseType_t UART_receive(uint32_t usart_id, uint16_t *data) {
     uart_t *uart = get_uart(usart_id);
-    if (uart == NULL) return pdFALSE;
+    if (uart == NULL) return pdFAIL;
 
     return pop(uart->rxq, data);
 }
 
 
-// Reseteo buffer de recepcion de UART
+/**
+ * @brief Limpia la cola de recepción de UART.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @param xTicksToWait Tiempo de espera para tomar el mutex.
+ * @return pdPASS si la limpieza fue exitosa, pdFAIL en caso contrario.
+ */
 BaseType_t UART_clear_rx_queue(uint32_t usart_id, TickType_t xTicksToWait) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return pdFAIL;
 
     // Aquí se usa un mutex para proteger el acceso a la cola
-    if(xSemaphoreTake(uart->mutex, xTicksToWait) != pdTRUE) return pdFAIL;
+    if(xSemaphoreTake(uart->mutex, xTicksToWait) != pdPASS) return pdFAIL;
 
     circular_buffer_reset(uart->rxq);
 
@@ -196,7 +244,14 @@ BaseType_t UART_clear_rx_queue(uint32_t usart_id, TickType_t xTicksToWait) {
     return pdPASS;
 }
 
-// Envio cadena de caracteres a través de UART
+/**
+ * @brief Envía una cadena de caracteres a través de UART.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @param s Cadena de caracteres a enviar.
+ * @param xTicksToWait Tiempo de espera para enviar cada carácter.
+ * @return Número de caracteres enviados.
+ */
 uint16_t UART_puts(uint32_t usart_id, const char *s, TickType_t xTicksToWait) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return 0;
@@ -213,7 +268,17 @@ uint16_t UART_puts(uint32_t usart_id, const char *s, TickType_t xTicksToWait) {
     return nsent;
 }
 
-// Envio de un caracter a través de UART
+/**
+ * @brief Envía un carácter a través de UART.
+ * 
+ * Coloca el carácter en la cola de transmisión de la UART especificada y espera 
+ * a obtener el mutex para garantizar el acceso exclusivo.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @param ch Carácter a enviar.
+ * @param xTicksToWait Tiempo de espera para obtener el mutex.
+ * @return pdPASS si el carácter se envió exitosamente, pdFAIL en caso contrario.
+ */
 BaseType_t UART_putchar(uint32_t usart_id, uint16_t ch, TickType_t xTicksToWait) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return pdFAIL;
@@ -229,7 +294,13 @@ BaseType_t UART_putchar(uint32_t usart_id, uint16_t ch, TickType_t xTicksToWait)
     return pdPASS;
 }
 
-// Imprimir los elementos en uart->rxq de UART (auxiliar)
+/**
+ * @brief Imprime el contenido de la cola de recepción de UART en la UART especificada.
+ * 
+ * Lee los datos de la cola de recepción y los envía a través de USART3 para su visualización.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ */
 void UART_print_buffer(uint32_t usart_id) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return;
@@ -289,7 +360,16 @@ void UART_print_buffer(uint32_t usart_id) {
     UART_putchar(USART3, '\n', pdMS_TO_TICKS(500));
 }
 
-// Wrapper SemaphoreTake
+/**
+ * @brief Toma el semáforo de UART.
+ * 
+ * Intenta tomar el semáforo de la UART especificada para asegurar el acceso 
+ * exclusivo a los recursos.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @param ticks_to_wait Tiempo de espera para tomar el semáforo.
+ * @return pdTRUE si se tomó el semáforo exitosamente, pdFALSE en caso contrario.
+ */
 BaseType_t UART_semaphore_take(uint32_t usart_id, TickType_t ticks_to_wait) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return pdFAIL;
@@ -297,7 +377,15 @@ BaseType_t UART_semaphore_take(uint32_t usart_id, TickType_t ticks_to_wait) {
     return xSemaphoreTake(uart->semaphore, ticks_to_wait);
 }
 
-// Wrapper SemaphoreGive
+
+/**
+ * @brief Libera el semáforo de UART.
+ * 
+ * Libera el semáforo de la UART especificada para permitir el acceso a otros recursos.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ * @return pdPASS si se liberó el semáforo exitosamente, pdFAIL en caso contrario.
+ */
 BaseType_t UART_semaphore_release(uint32_t usart_id) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return pdFAIL;
@@ -305,18 +393,41 @@ BaseType_t UART_semaphore_release(uint32_t usart_id) {
     return xSemaphoreGive(uart->semaphore);
 }
 
+/**
+ * @brief Maneja las interrupciones de USART1.
+ * 
+ * Llama a la función de manejo genérico de interrupciones para USART1.
+ */
 void usart1_isr(void) {
     usart_generic_isr(USART1);
 }
 
+/**
+ * @brief Maneja las interrupciones de USART2.
+ * 
+ * Llama a la función de manejo genérico de interrupciones para USART2.
+ */
 void usart2_isr(void) {
     usart_generic_isr(USART2);
 }
 
+/**
+ * @brief Maneja las interrupciones de USART3.
+ * 
+ * Llama a la función de manejo genérico de interrupciones para USART3.
+ */
 void usart3_isr(void) {
     usart_generic_isr(USART3);
 }
 
+/**
+ * @brief Maneja las interrupciones genéricas de USART.
+ * 
+ * Se encarga de recibir datos y almacenarlos en la cola de recepción correspondiente
+ * según el identificador del USART.
+ * 
+ * @param usart_id Identificador del USART (USART1, USART2, USART3).
+ */
 static void usart_generic_isr(uint32_t usart_id) {
     uart_t *uart = get_uart(usart_id);
     if (uart == NULL) return;
