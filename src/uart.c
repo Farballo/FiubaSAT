@@ -1,10 +1,13 @@
 #include "FreeRTOS.h"
+
 #include "uart.h"
+#include "circular_buffer.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "circular_buffer.h"
+
 
 #define SIZE_BUFFER 512  // Buffer sizes
 
@@ -221,7 +224,6 @@ BaseType_t UART_receive(uint32_t usart_id, uint16_t *data) {
 
     return pop(uart->rxq, data);
 }
-
 
 /**
  * @brief Limpia la cola de recepción de UART.
