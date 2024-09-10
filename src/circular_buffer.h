@@ -110,4 +110,5 @@ uint16_t circular_buffer_to_string(circular_buffer_t *buff, char *output, uint16
  */
 void circular_buffer_reset(circular_buffer_t *buff);
 
+int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest);
 #endif // CIRCULAR_BUFFER_H

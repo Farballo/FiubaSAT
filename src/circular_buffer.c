@@ -4,6 +4,7 @@
 #include <libopencm3/stm32/usart.h>
 #include "circular_buffer.h"
 #include "uart.h"
+#include "string.h"
 
 // Definición de la estructura circular_buffer_t
 struct circular_buffer_t {
@@ -194,4 +195,31 @@ void circular_buffer_reset(circular_buffer_t *buff) {
         buff->in = 0;
         buff->out = 0;
     }
+}
+
+
+int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest) {
+    // Encontrar la posición del patrón de inicio en la cadena fuente
+    const char *start = strstr(source, pattern_start);
+    if (start == NULL) {
+        return -1; // Patrón de inicio no encontrado
+    }
+
+    // Avanzar el puntero al final del patrón de inicio
+    //start += strlen(pattern_start);
+
+    // Encontrar la posición del patrón de final después del patrón de inicio
+    const char *finish = strstr(start, pattern_finish);
+    if (finish == NULL) {
+        return -2; // Patrón de final no encontrado
+    }
+
+    // Calcular la longitud de la subcadena a copiar
+    size_t len = finish - start;
+
+    // Copiar la subcadena al buffer de destino
+    strncpy(dest, start, len);
+    dest[len] = '\0'; // Null-terminar el buffer de destino
+
+    return 0; // Éxito
 }
