@@ -16,9 +16,9 @@ typedef struct {
 }TIME;
 
 typedef struct {
-	float latitude;
+	char latitude[12];
 	char NS;
-	float longitude;
+	char longitude[12];
 	char EW;
 }LOCATION;
 

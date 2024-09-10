@@ -32,11 +32,12 @@ int daychange = 0;
 
 int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 {
+	daychange = 0;  // Reinicia el cambio de día
 	inx = 0;
 	char buffer[12];
 	int i = 0;
-	//while (GGAbuffer[inx] != ',') inx++;  // 1st ','
-	//inx++;
+	while (GGAbuffer[inx] != ',') inx++;  // 1st ','
+	inx++;
 	while (GGAbuffer[inx] != ',') inx++;  // After time ','
 	inx++;
 	while (GGAbuffer[inx] != ',') inx++;  // after latitude ','
@@ -57,7 +58,7 @@ int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 		gga->isfixValid = 0;   // If the fix is not available
 		return 1;  // return error
 	}
-	//while (GGAbuffer[inx] != ',') inx++;  // 1st ','
+	while (GGAbuffer[inx] != ',') inx++;  // 1st ','
 
 
 /*********************** Get TIME ***************************/
@@ -101,11 +102,11 @@ int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 
 /***************** Get LATITUDE  **********************/
 	inx++;   // Reach the first number in the lattitude
-	memset(buffer, '\0', 12);
+	memset(gga->lcation.latitude, '\0', 12);
 	i=0;
 	while (GGAbuffer[inx] != ',')   // copy upto the we reach the after lattitude ','
 	{
-		buffer[i] = GGAbuffer[inx];
+		gga->lcation.latitude[i] = GGAbuffer[inx];
 		i++;
 		inx++;
 	}
@@ -120,7 +121,7 @@ int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 	int declen = (strlen(buffer))-j;  // calculate the number of digit after decimal
 	int dec = atoi ((char *) buffer+j);  // conver the decimal part a a separate number
 	float lat = (num/100.0) + (dec/pow(10, (declen+2)));  // 1234.56789 = 12.3456789
-	gga->lcation.latitude = lat;  // save the lattitude data into the strucure
+	//gga->lcation.latitude = lat;  // save the lattitude data into the strucure 
 	inx++;  
 	gga->lcation.NS = GGAbuffer[inx];  // save the N/S into the structure
 
@@ -128,11 +129,11 @@ int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 /***********************  GET LONGITUDE **********************/
 	inx++;  // ',' after NS character
 	inx++;  // Reach the first number in the longitude
-	memset(buffer, '\0', 12);
+	memset(gga->lcation.longitude, '\0', 12);
 	i=0;
 	while (GGAbuffer[inx] != ',')  // copy upto the we reach the after longitude ','
 	{
-		buffer[i] = GGAbuffer[inx];
+		gga->lcation.longitude[i] = GGAbuffer[inx];
 		i++;
 		inx++;
 	}
@@ -143,7 +144,7 @@ int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 	declen = (strlen(buffer))-j;  // calculate the number of digit after decimal
 	dec = atoi ((char *) buffer+j);  // conver the decimal part a a separate number
 	lat = (num/100.0) + (dec/pow(10, (declen+2)));  // 1234.56789 = 12.3456789
-	gga->lcation.longitude = lat;  // save the longitude data into the strucure
+	//gga->lcation.longitude = lat;  // save the longitude data into the strucure
 	inx++;
 	gga->lcation.EW = GGAbuffer[inx];  // save the E/W into the structure
 
@@ -200,11 +201,12 @@ int decodeGGA (char *GGAbuffer, GGASTRUCT *gga)
 
 int decodeRMC (char *RMCbuffer, RMCSTRUCT *rmc)
 {
+	daychange = 0;  // Reinicia el cambio de día
 	inx = 0;
 	char buffer[12];
 	int i = 0;
-	//while (RMCbuffer[inx] != ',') inx++;  // 1st ,
-	//inx++;
+	while (RMCbuffer[inx] != ',') inx++;  // 1st ,
+	inx++;
 	while (RMCbuffer[inx] != ',') inx++;  // After time ,
 	inx++;
 	if (RMCbuffer[inx] == 'A')  // Here 'A' Indicates the data is valid, and 'V' indicates invalid data
