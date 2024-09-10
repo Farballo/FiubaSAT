@@ -101,7 +101,6 @@ BaseType_t pop(circular_buffer_t *buff, uint16_t *data);
  */
 uint16_t circular_buffer_to_string(circular_buffer_t *buff, char *output, uint16_t max_len);
 
-
 /**
  * @brief Resetea el buffer circular.
  * 
