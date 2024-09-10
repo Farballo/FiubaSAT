@@ -17,7 +17,6 @@
 
 // Handle para la tarea del parpadeo
 static TaskHandle_t blink_handle;
-static int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest);
 
 #define SIZE_BUFFER 512
 
@@ -25,7 +24,6 @@ static int Copy_from_to(const char *source, const char *pattern_start, const cha
 static void taskUART1_GPS(uint32_t usart_id) {
     vTaskDelay(pdMS_TO_TICKS(4000));
     char buffer[SIZE_BUFFER];
-    uint16_t datos;
 
     char GGA[100];
     char RMC[100];
@@ -33,70 +31,44 @@ static void taskUART1_GPS(uint32_t usart_id) {
     GPSSTRUCT gpsData;
 
     int flagGGA = 0, flagRMC = 0;
+    char bufferNMEA[100];
 
     for (;;) {
-        datos = UART_available_data(usart_id);
-        if (datos > 400) {
-            UART_clear_rx_queue(usart_id, pdMS_TO_TICKS(100));
-        } else if (datos > 250) {
-            memset(buffer, 0, SIZE_BUFFER);
-            get_rxq_buffer(usart_id, buffer, SIZE_BUFFER);
+        memset(buffer, 0, SIZE_BUFFER);
+        get_rxq_buffer(usart_id, buffer, SIZE_BUFFER);
 
-            Copy_from_to(buffer, "$GPGGA,", "*", GGA);
-            if (decodeGGA(GGA, &gpsData.ggastruct) == 0) flagGGA = 2;  // 2 indicates the data is valid
-            else flagGGA = 1;  // 1 indicates the data is invalid
+        Copy_from_to(buffer, "$GPGGA,", "*", GGA);
+        if (decodeGGA(GGA, &gpsData.ggastruct) == 0) flagGGA = 2;  // 2 indicates the data is valid
+        else flagGGA = 1;  // 1 indicates the data is invalid
 
-            Copy_from_to(buffer, "$GPRMC,", "*", RMC);
-            if (decodeRMC(RMC, &gpsData.rmcstruct) == 0) flagRMC = 2;  // 2 indicates the data is valid
-            else flagRMC = 1;  // 1 indicates the data is invalid
+        Copy_from_to(buffer, "$GPRMC,", "*", RMC);
+        if (decodeRMC(RMC, &gpsData.rmcstruct) == 0) flagRMC = 2;  // 2 indicates the data is valid
+        else flagRMC = 1;  // 1 indicates the data is invalid
 
-            if (flagGGA == 2 && flagRMC == 2)
-                UART_puts(USART3, "GGA and RMC data is valid\r\n", pdMS_TO_TICKS(100));
-            
+        if (flagGGA == 2 && flagRMC == 2) {
+            UART_puts(USART3, "GGA and RMC data is valid\r\n", pdMS_TO_TICKS(100));
+            snprintf(bufferNMEA, sizeof(bufferNMEA), "Latitud: %s %c - Longitud: %s %c - %i/%i/%i\r\n", gpsData.ggastruct.lcation.latitude, gpsData.ggastruct.lcation.NS, gpsData.ggastruct.lcation.longitude, gpsData.ggastruct.lcation.EW, gpsData.rmcstruct.date.Day, gpsData.rmcstruct.date.Mon, gpsData.rmcstruct.date.Yr);
+            UART_puts(USART3, bufferNMEA, pdMS_TO_TICKS(500));
+        } 
+        else {
+            UART_puts(USART3, "GGA and RMC data is invalid\r\n", pdMS_TO_TICKS(100));
             UART_puts(USART3, buffer, pdMS_TO_TICKS(100));
             UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-            
-            UART_puts(USART3, "GGA: ", pdMS_TO_TICKS(100));
-            UART_puts(USART3, GGA, pdMS_TO_TICKS(100));
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-            
-            UART_puts(USART3, "RMC: ", pdMS_TO_TICKS(100));
-            UART_puts(USART3, RMC, pdMS_TO_TICKS(100));
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
+            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100)); 
+        }       
 
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-            UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
-            UART_clear_rx_queue(usart_id, pdMS_TO_TICKS(100));
-        }
-        vTaskDelay(pdMS_TO_TICKS(700));
+        UART_puts(USART3, GGA, pdMS_TO_TICKS(100));
+        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
+        
+        UART_puts(USART3, RMC, pdMS_TO_TICKS(100));
+        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
+
+        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
+        UART_puts(USART3, "\r\n", pdMS_TO_TICKS(100));
+        UART_clear_rx_queue(usart_id, pdMS_TO_TICKS(100));
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
-}
-
-static int Copy_from_to(const char *source, const char *pattern_start, const char *pattern_finish, char *dest) {
-    // Encontrar la posición del patrón de inicio en la cadena fuente
-    const char *start = strstr(source, pattern_start);
-    if (start == NULL) {
-        return -1; // Patrón de inicio no encontrado
-    }
-
-    // Avanzar el puntero al final del patrón de inicio
-    start += strlen(pattern_start);
-
-    // Encontrar la posición del patrón de final después del patrón de inicio
-    const char *finish = strstr(start, pattern_finish);
-    if (finish == NULL) {
-        return -2; // Patrón de final no encontrado
-    }
-
-    // Calcular la longitud de la subcadena a copiar
-    size_t len = finish - start;
-
-    // Copiar la subcadena al buffer de destino
-    strncpy(dest, start, len);
-    dest[len] = '\0'; // Null-terminar el buffer de destino
-
-    return 0; // Éxito
 }
 
 /* Acá estaría la tarea asignada al periférico conectado a la interfaz USART3 */
