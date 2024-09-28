@@ -30,7 +30,9 @@ libopencm3: An open-source library for ARM Cortex-M microcontrollers, which prov
 - Modular and scalable design, allowing easy expansion of features.
 - Code structured to maximize power efficiency and minimize resource usage.
 
-# Project Structure
+## **Project Structure**
+
+```bash
 FiubaSAT/
 │
 ├── src/                   # Source code for the OBC
@@ -47,6 +49,7 @@ FiubaSAT/
 ├── tests/                 # Unit tests and integration tests
 │
 └── README.md              # Project readme file
+```
 
 # Getting Started
 To get started with developing or running the OBC software for FiubaSAT, follow these instructions.
